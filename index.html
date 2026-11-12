@@ -5,14 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>RainlitPDF — PDF & Image Converter</title>
 
-  <!-- Konfigurasi PWA khusus iPhone (Safari iOS) -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="RainlitPDF" />
   <meta name="theme-color" content="#0A192F" />
   <link rel="manifest" href="manifest.json" />
 
-  <!-- Pustaka Client-Side (100% jalan di RAM HP tanpa Server) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -125,13 +123,41 @@
       background-color: var(--c-panel);
       color: var(--c-text-light);
       border: none;
-      height: 36px;
+      height: 34px;
       padding: 0 8px;
       border-radius: 4px;
       font-size: 12px;
       font-weight: 700;
       width: 100%;
       outline: none;
+    }
+
+    .folder-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--c-panel);
+      font-size: 11px;
+    }
+    .folder-path {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #93C5FD;
+    }
+    .btn-folder-pick {
+      background-color: var(--c-panel);
+      color: var(--c-text-light);
+      border: 1px solid var(--c-dark-accent);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
     }
 
     .status-input {
@@ -340,6 +366,9 @@
       padding: 6px 10px;
       font-size: 12px;
       font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     .progress-list {
       flex: 1;
@@ -372,6 +401,39 @@
     .st-pending { color: #F39C12; }
     .st-ongoing { color: #38BDF8; }
     .st-done { color: #2ECC71; }
+
+    /* MODAL SIMPAN FILE HASIL BATCH */
+    .save-banner {
+      background-color: #065F46;
+      border: 1px solid #10B981;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 10px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .save-banner-title {
+      color: #FFFFFF;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .save-btn-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .btn-save-now {
+      flex: 1;
+      background-color: #10B981;
+      color: #042F2E;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -407,6 +469,12 @@
             <option value="No Compression">No Compression</option>
           </select>
         </div>
+      </div>
+      <!-- PILIH FOLDER TUJUAN PENYIMPANAN -->
+      <div class="folder-bar">
+        <span>📁 Output:</span>
+        <span id="lblOutputFolder" class="folder-path">Pilih saat selesai / Folder Unduhan</span>
+        <button class="btn-folder-pick" onclick="selectOutputFolder()">📁 Pilih Folder Tujuan</button>
       </div>
     </div>
 
@@ -450,8 +518,20 @@
       </div>
 
       <div id="panelProgress" class="progress-panel">
-        <div class="progress-header">📊 Progress Detail Setiap Chapter / Item</div>
-        <div id="progressListContainer" class="progress-list"></div>
+        <div class="progress-header">
+          <span>📊 Progress Detail Setiap Chapter / Item</span>
+        </div>
+        <div class="progress-list">
+          <!-- Banner Tombol Simpan Langsung ke Folder (Khusus iPhone / Batch) -->
+          <div id="saveBanner" class="save-banner">
+            <div id="saveBannerTitle" class="save-banner-title">✅ Semua File Selesai Diproses!</div>
+            <div class="save-btn-group">
+              <button class="btn-save-now" onclick="shareOrSaveToFiles()">📂 Pilih Folder & Simpan (Files)</button>
+              <button class="btn-save-now" style="background:#38BDF8" onclick="downloadAllAsZip()">📦 Unduh Semua (1 ZIP)</button>
+            </div>
+          </div>
+          <div id="progressListContainer"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -464,6 +544,8 @@
     let batchItemsData = [];
     let copiedItems = [];
     let isProcessing = false;
+    let directoryHandle = null; // Handle untuk simpan langsung ke folder
+    let generatedResults = [];  // Menyimpan hasil PDF/ZIP agar tidak hilang saat Batch > 1
 
     const stateConfig = {
       Single: { mode: "Folders/ZIPs to PDFs", comp: "Recommended", status: "Ready / Idle", pct: 0 },
@@ -471,7 +553,7 @@
     };
 
     function naturalCompare(a, b) {
-      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+      return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
     }
 
     function isValidImageName(name) {
@@ -479,6 +561,34 @@
       const base = name.split('/').pop();
       if (base.startsWith('._') || name.includes('__MACOSX')) return false;
       return ['.png', '.jpg', '.jpeg', '.webp', '.bmp'].some(ext => lower.endsWith(ext));
+    }
+
+    // FITUR PILIH FOLDER OUTPUT LANGSUNG
+    async function selectOutputFolder() {
+      if ('showDirectoryPicker' in window) {
+        try {
+          directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+          document.getElementById('lblOutputFolder').textContent = `Folder: ${directoryHandle.name} (Aktif)`;
+        } catch (err) {
+          console.log("Batal pilih folder:", err);
+        }
+      } else {
+        alert("Di iPhone / Safari, menu pemilihan folder tujuan (Save to Files) akan otomatis terbuka begitu proses konversi selesai!");
+      }
+    }
+
+    async function writeDirectlyToFolder(filename, blob) {
+      if (!directoryHandle) return false;
+      try {
+        const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return true;
+      } catch (e) {
+        console.warn("Gagal tulis langsung ke folder:", e);
+        return false;
+      }
     }
 
     function getActiveData() {
@@ -593,7 +703,9 @@
     });
 
     async function extractImagesFromZipFile(zipFile) {
-      const zip = await JSZip.loadAsync(zipFile);
+      // Baca via ArrayBuffer agar file di memori tidak terkunci saat Batch > 1
+      const buf = await zipFile.arrayBuffer();
+      const zip = await JSZip.loadAsync(buf);
       const entries = [];
       zip.forEach((relPath, zipEntry) => {
         if (!zipEntry.dir && isValidImageName(relPath)) {
@@ -603,7 +715,8 @@
       entries.sort((a, b) => naturalCompare(a.name, b.name));
       const results = [];
       for (const entry of entries) {
-        const blob = await entry.async("blob");
+        const uint8 = await entry.async("uint8array");
+        const blob = new Blob([uint8]);
         const baseName = entry.name.split('/').pop();
         results.push({ name: baseName, blob });
       }
@@ -663,6 +776,7 @@
       if (!data.length) return;
       if (confirm("Hapus semua daftar item?")) {
         data.length = 0;
+        document.getElementById('saveBanner').style.display = 'none';
         setStatus("Ready / Idle", 0);
         renderAll();
       }
@@ -690,7 +804,7 @@
       return groups;
     }
 
-    function resolveGroupOutputName(group) {
+    function resolveGroupOutputName(group, groupIndex) {
       if (activeMode === "Single") return "Merged_Document.pdf";
       let base = group[0].name;
       for (const item of group) {
@@ -699,7 +813,8 @@
           break;
         }
       }
-      return base.replace(/\.[^/.]+$/, "") + ".pdf";
+      const clean = base.replace(/\.[^/.]+$/, "");
+      return `${clean}.pdf`;
     }
 
     function renderAll() {
@@ -753,7 +868,7 @@
         if (!isDiv) {
           displayName = activeMode === "Single"
             ? "📄 Merged Output Document.pdf"
-            : `${gIdx + 1}. ${resolveGroupOutputName(group)} (${group.length} item)`;
+            : `${gIdx + 1}. ${resolveGroupOutputName(group, gIdx + 1)} (${group.length} item)`;
           avgProg = group.reduce((s, i) => s + (i.progress || 0), 0) / group.length;
           const statuses = group.map(i => i.status);
           if (statuses.every(s => s === "Done")) { statusText = "DONE"; statusClass = "st-done"; }
@@ -776,14 +891,15 @@
       }).join('');
     }
 
+    // KOMPRESI GAMBAR BEBAS BOCOR MEMORI DI SAFARI (Canvas Daur Ulang)
     function compressImageBlob(blob, maxWidth, quality) {
       return new Promise((resolve, reject) => {
         const url = URL.createObjectURL(blob);
         const img = new Image();
         img.onload = () => {
           URL.revokeObjectURL(url);
-          let w = img.naturalWidth;
-          let h = img.naturalHeight;
+          let w = img.naturalWidth || img.width;
+          let h = img.naturalHeight || img.height;
           if (w > maxWidth) {
             const scale = maxWidth / w;
             w = Math.round(w * scale);
@@ -797,14 +913,20 @@
           ctx.fillRect(0, 0, w, h);
           ctx.drawImage(img, 0, 0, w, h);
           const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          // Bebaskan RAM Canvas iOS seketika agar Batch > 1 tidak crash
+          canvas.width = 0;
+          canvas.height = 0;
           resolve({ dataUrl, width: w, height: h });
         };
-        img.onerror = reject;
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Gagal memuat salah satu gambar."));
+        };
         img.src = url;
       });
     }
 
-    function triggerDownload(blob, filename) {
+    function triggerSingleDownload(blob, filename) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -812,15 +934,50 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
 
+    // FITUR SIMPAN KE FOLDER IPHONE (NATIVE SHARE SHEET -> SAVE TO FILES)
+    async function shareOrSaveToFiles() {
+      if (!generatedResults.length) return;
+      try {
+        const filesArray = generatedResults.map(r => new File([r.blob], r.name, { type: r.mime }));
+        if (navigator.canShare && navigator.canShare({ files: filesArray })) {
+          await navigator.share({
+            files: filesArray,
+            title: 'RainlitPDF Output'
+          });
+          return;
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+      }
+      // Fallback jika browser tidak mendukung share multi-file: unduh berurutan dengan jeda aman
+      for (let i = 0; i < generatedResults.length; i++) {
+        triggerSingleDownload(generatedResults[i].blob, generatedResults[i].name);
+        await new Promise(r => setTimeout(r, 650));
+      }
+    }
+
+    async function downloadAllAsZip() {
+      if (!generatedResults.length) return;
+      setStatus("Mengemas semua hasil ke 1 file ZIP...", 99);
+      const bundle = new JSZip();
+      generatedResults.forEach(r => bundle.file(r.name, r.blob));
+      const zipBlob = await bundle.generateAsync({ type: "blob" });
+      triggerSingleDownload(zipBlob, `RainlitPDF_Batch_${generatedResults.length}_Files.zip`);
+      setStatus("Bundel ZIP berhasil diunduh!", 100);
+    }
+
+    // MESIN UTAMA KONVERSI (ANTI-CRASH BATCH > 1)
     async function startProcess() {
       const data = getActiveData();
       if (!data.length) return alert("Belum ada item yang dimuat!");
       if (isProcessing) return;
 
       isProcessing = true;
+      generatedResults = [];
+      document.getElementById('saveBanner').style.display = 'none';
       document.getElementById('btnStart').disabled = true;
       switchViewTab(1);
 
@@ -837,15 +994,18 @@
           else if (compOpt === "No Compression") { quality = 0.98; maxW = 99999; }
 
           const groups = getProcessingGroups(itemsToProcess);
-          const totalPdfs = groups.filter(g => g[0].type !== "divider").length;
+          const validGroups = groups.filter(g => g[0].type !== "divider");
+          const totalPdfs = validGroups.length;
           let curPdfIdx = 0;
           const usedNames = new Set();
+          let directSavedCount = 0;
 
           for (const group of groups) {
             if (group[0].type === "divider") continue;
             curPdfIdx++;
             group.forEach(i => { i.status = "Ongoing"; i.progress = 10; });
             renderProgressView();
+            await new Promise(r => setTimeout(r, 30));
 
             const orderedBlobs = [];
             for (const item of group) {
@@ -859,14 +1019,14 @@
               }
             }
 
-            let outName = resolveGroupOutputName(group);
+            let outName = resolveGroupOutputName(group, curPdfIdx);
             if (usedNames.has(outName.toLowerCase())) {
               outName = outName.replace(/\.pdf$/i, `_${curPdfIdx}.pdf`);
             }
             usedNames.add(outName.toLowerCase());
 
-            const overallPct = (curPdfIdx / totalPdfs) * 100;
-            setStatus(`Memproses ${outName} (${orderedBlobs.length} hal)...`, overallPct);
+            const overallPct = ((curPdfIdx - 1) / totalPdfs) * 100;
+            setStatus(`Memproses (${curPdfIdx}/${totalPdfs}): ${outName}...`, overallPct);
 
             if (orderedBlobs.length > 0) {
               const { jsPDF } = window.jspdf;
@@ -879,32 +1039,50 @@
                 const orient = pdfW > pdfH ? 'l' : 'p';
 
                 if (idx === 0) {
-                  pdfDoc = new jsPDF({ orientation: orient, unit: 'pt', format: [pdfW, pdfH] });
+                  pdfDoc = new jsPDF({ orientation: orient, unit: 'pt', format: [pdfW, pdfH], compress: true });
                 } else {
                   pdfDoc.addPage([pdfW, pdfH], orient);
                 }
-                pdfDoc.addImage(dataUrl, 'JPEG', 0, 0, pdfW, pdfH);
+                pdfDoc.addImage(dataUrl, 'JPEG', 0, 0, pdfW, pdfH, undefined, 'FAST');
 
-                const subProg = 20 + ((idx + 1) / orderedBlobs.length) * 75;
+                const subProg = 15 + ((idx + 1) / orderedBlobs.length) * 80;
                 group.forEach(i => i.progress = subProg);
                 renderProgressView();
-                await new Promise(r => setTimeout(r, 5));
+                await new Promise(r => setTimeout(r, 10));
               }
 
               const pdfBlob = pdfDoc.output('blob');
-              triggerDownload(pdfBlob, outName);
+              generatedResults.push({ name: outName, blob: pdfBlob, mime: 'application/pdf' });
+
+              // Jika pengguna sudah memilih Folder Output langsung, tulis otomatis ke folder tersebut
+              const savedDirectly = await writeDirectlyToFolder(outName, pdfBlob);
+              if (savedDirectly) directSavedCount++;
             }
 
             group.forEach(i => { i.status = "Done"; i.progress = 100; });
             renderProgressView();
+            // Jeda antar grup agar Garbage Collector membebaskan RAM sebelum grup berikutnya
+            await new Promise(r => setTimeout(r, 150));
           }
 
-          setStatus("Selesai Proses Konversi!", 100);
-          alert("Sukses! File PDF berhasil dibuat dan diunduh ke aplikasi Files iPhone Anda.");
+          setStatus(`Selesai! (${generatedResults.length} PDF berhasil dibuat)`, 100);
+
+          if (directSavedCount === generatedResults.length && generatedResults.length > 0) {
+            alert(`Sukses! ${directSavedCount} file PDF langsung tersimpan di folder "${directoryHandle.name}".`);
+          } else if (generatedResults.length > 0) {
+            document.getElementById('saveBannerTitle').textContent = `✅ ${generatedResults.length} File PDF Siap Disimpan!`;
+            document.getElementById('saveBanner').style.display = 'flex';
+            // Jika cuma 1 file, langsung tawarkan simpan/unduh otomatis
+            if (generatedResults.length === 1) {
+              await shareOrSaveToFiles();
+            }
+          }
         } else {
+          // MODE 2: PDF TO IMAGES
           const pdfItems = itemsToProcess.filter(i => i.type === "pdf");
           const mime = compOpt === "PNG" ? "image/png" : (compOpt === "WebP" ? "image/webp" : "image/jpeg");
           const ext = compOpt.toLowerCase();
+          let directSavedCount = 0;
 
           for (let idx = 0; idx < pdfItems.length; idx++) {
             const item = pdfItems[idx];
@@ -925,24 +1103,42 @@
               await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
 
               const blob = await new Promise(res => canvas.toBlob(res, mime, 0.9));
+              canvas.width = 0;
+              canvas.height = 0;
               outZip.file(`page_${String(pNum).padStart(3, '0')}.${ext}`, blob);
 
               item.progress = (pNum / pdf.numPages) * 100;
               setStatus(`Mengekstrak ${baseName} (${pNum}/${pdf.numPages})...`, ((idx + (pNum / pdf.numPages)) / pdfItems.length) * 100);
               renderProgressView();
+              await new Promise(r => setTimeout(r, 10));
             }
 
             const zipBlob = await outZip.generateAsync({ type: "blob" });
-            triggerDownload(zipBlob, `${baseName}_images.zip`);
+            const zipName = `${baseName}_images.zip`;
+            generatedResults.push({ name: zipName, blob: zipBlob, mime: 'application/zip' });
+
+            const savedDirectly = await writeDirectlyToFolder(zipName, zipBlob);
+            if (savedDirectly) directSavedCount++;
+
             item.status = "Done";
             item.progress = 100;
             renderProgressView();
+            await new Promise(r => setTimeout(r, 150));
           }
+
           setStatus("Selesai Ekstraksi PDF ke Gambar!", 100);
-          alert("Sukses! Gambar hasil ekstraksi PDF telah diunduh dalam bentuk ZIP.");
+          if (directSavedCount === generatedResults.length && generatedResults.length > 0) {
+            alert(`Sukses! Semua ZIP gambar langsung tersimpan di folder "${directoryHandle.name}".`);
+          } else if (generatedResults.length > 0) {
+            document.getElementById('saveBannerTitle').textContent = `✅ ${generatedResults.length} ZIP Gambar Siap Disimpan!`;
+            document.getElementById('saveBanner').style.display = 'flex';
+            if (generatedResults.length === 1) {
+              await shareOrSaveToFiles();
+            }
+          }
         }
       } catch (err) {
-        alert("Terjadi kesalahan: " + err.message);
+        alert("Terjadi kesalahan saat memproses Batch: " + err.message);
       } finally {
         isProcessing = false;
         document.getElementById('btnStart').disabled = false;
