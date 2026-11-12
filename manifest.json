@@ -1,0 +1,9 @@
+{
+  "name": "RainlitPDF — PDF & Image Converter",
+  "short_name": "RainlitPDF",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#060D1A",
+  "theme_color": "#0A192F",
+  "orientation": "portrait"
+}
