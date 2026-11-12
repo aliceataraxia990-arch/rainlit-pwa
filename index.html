@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>RainlitPDF — PDF & Image Converter</title>
+
+  <!-- Konfigurasi PWA khusus iPhone (Safari iOS) -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="RainlitPDF" />
+  <meta name="theme-color" content="#0A192F" />
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Pustaka Client-Side (100% jalan di RAM HP tanpa Server) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <style>
+    :root {
+      --c-header: #0A192F;
+      --c-bg-main: #060D1A;
+      --c-panel: #112240;
+      --c-dark-accent: #1D4ED8;
+      --c-btn-start: #2563EB;
+      --c-text-dark: #DBEAFE;
+      --c-text-light: #FFFFFF;
+      --c-canvas-bg: #040914;
+      --c-btn-danger: #DC2626;
+      --c-listbox-bg: #0D1B2A;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--c-bg-main);
+      color: var(--c-text-dark);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .app-bar {
+      background-color: var(--c-header);
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+      flex-shrink: 0;
+    }
+    .brand-title {
+      color: var(--c-text-light);
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .mode-switch {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-mode {
+      background-color: var(--c-panel);
+      color: var(--c-text-dark);
+      border: none;
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-mode.active {
+      background-color: var(--c-dark-accent);
+      color: var(--c-text-light);
+    }
+
+    .main-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .card-box {
+      background-color: var(--c-bg-main);
+      border: 1.5px solid var(--c-panel);
+      border-radius: 6px;
+      padding: 8px 10px;
+      flex-shrink: 0;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--c-text-dark);
+      margin-bottom: 6px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .col {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+    .lbl-small {
+      font-size: 11px;
+      color: var(--c-text-dark);
+      margin-bottom: 2px;
+    }
+    select.dropdown {
+      background-color: var(--c-panel);
+      color: var(--c-text-light);
+      border: none;
+      height: 36px;
+      padding: 0 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      width: 100%;
+      outline: none;
+    }
+
+    .status-input {
+      flex: 1;
+      background-color: #FFFFFF;
+      color: var(--c-header);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px;
+      border-radius: 4px;
+      border: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .btn-start {
+      background-color: var(--c-btn-start);
+      color: #FFFFFF;
+      border: none;
+      border-radius: 4px;
+      padding: 9px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-start:disabled {
+      opacity: 0.5;
+    }
+    .prog-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .prog-track {
+      flex: 1;
+      height: 8px;
+      background-color: var(--c-panel);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .prog-fill {
+      height: 100%;
+      width: 0%;
+      background-color: var(--c-btn-start);
+      transition: width 0.15s ease;
+    }
+    .prog-pct {
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 32px;
+      text-align: right;
+    }
+
+    .tab-bar {
+      background-color: var(--c-header);
+      border-radius: 6px;
+      display: flex;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: var(--c-text-dark);
+      padding: 9px 4px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      color: var(--c-text-light);
+      border-bottom-color: var(--c-btn-start);
+    }
+
+    .panel-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .items-panel {
+      flex: 1;
+      background-color: var(--c-panel);
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow: hidden;
+    }
+    .btn-action {
+      flex: 1;
+      background-color: var(--c-dark-accent);
+      color: #FFFFFF;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 4px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .btn-divider {
+      background-color: #1E3A8A;
+    }
+
+    .listbox {
+      flex: 1;
+      background-color: var(--c-listbox-bg);
+      border: 1px solid rgba(29, 78, 216, 0.4);
+      border-radius: 4px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .empty-msg {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 12px;
+      color: var(--c-text-dark);
+      padding: 16px;
+    }
+    .list-item {
+      display: flex;
+      align-items: center;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--c-panel);
+      gap: 8px;
+      font-size: 12px;
+    }
+    .list-item.selected {
+      background-color: rgba(29, 78, 216, 0.55);
+    }
+    .list-item.divider-row {
+      background-color: #172554;
+      color: #60A5FA;
+      font-weight: 700;
+    }
+    .item-name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .move-btns {
+      display: flex;
+      gap: 4px;
+    }
+    .btn-mini {
+      background-color: var(--c-panel);
+      color: var(--c-text-dark);
+      border: none;
+      border-radius: 3px;
+      padding: 3px 6px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .bottom-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-icon {
+      background: transparent;
+      border: 1px solid rgba(219,234,254,0.2);
+      color: var(--c-text-dark);
+      border-radius: 4px;
+      padding: 6px 9px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .spacer { flex: 1; }
+    .btn-danger {
+      background-color: var(--c-btn-danger);
+      color: #FFFFFF;
+      border: none;
+      border-radius: 4px;
+      padding: 7px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .progress-panel {
+      flex: 1;
+      background-color: var(--c-canvas-bg);
+      border: 1px solid var(--c-dark-accent);
+      border-radius: 6px;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .progress-header {
+      background-color: var(--c-dark-accent);
+      color: var(--c-text-light);
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .progress-list {
+      flex: 1;
+      padding: 8px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .prog-card {
+      background-color: var(--c-panel);
+      border: 1px solid rgba(29, 78, 216, 0.4);
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+    .prog-card-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .prog-card-title {
+      color: var(--c-text-light);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-right: 8px;
+    }
+    .status-badge { font-size: 11px; }
+    .st-pending { color: #F39C12; }
+    .st-ongoing { color: #38BDF8; }
+    .st-done { color: #2ECC71; }
+  </style>
+</head>
+<body>
+
+  <input type="file" id="inputFolder" webkitdirectory directory multiple style="display:none" />
+  <input type="file" id="inputFiles" multiple accept=".zip,.pdf,.png,.jpg,.jpeg,.webp,image/*,application/pdf,application/zip" style="display:none" />
+
+  <div class="app-bar">
+    <div class="brand-title">Rainlit Tools Apps</div>
+    <div class="mode-switch">
+      <button id="btnModeSingle" class="btn-mode active" onclick="switchMode('Single')">Single</button>
+      <button id="btnModeBatch" class="btn-mode" onclick="switchMode('Batch')">Batch</button>
+    </div>
+  </div>
+
+  <div class="main-body">
+    <div class="card-box">
+      <div class="card-title">Operation & Configuration</div>
+      <div class="row">
+        <div class="col" style="flex:5">
+          <span class="lbl-small">Mode:</span>
+          <select id="selMode" class="dropdown" onchange="onOperationModeChange()">
+            <option value="Folders/ZIPs to PDFs">Folders/ZIPs to PDFs</option>
+            <option value="PDF to Images">PDF to Images</option>
+          </select>
+        </div>
+        <div class="col" style="flex:4">
+          <span class="lbl-small">Quality/Format:</span>
+          <select id="selQuality" class="dropdown">
+            <option value="Recommended">Recommended</option>
+            <option value="Extreme">Extreme</option>
+            <option value="Less">Less</option>
+            <option value="No Compression">No Compression</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-box">
+      <div class="card-title">Status & Execution</div>
+      <div class="row">
+        <div id="txtStatus" class="status-input">Ready / Idle</div>
+        <button id="btnStart" class="btn-start" onclick="startProcess()">🚀 START PROCESS</button>
+      </div>
+      <div class="prog-row">
+        <div class="prog-track">
+          <div id="barOverall" class="prog-fill"></div>
+        </div>
+        <div id="lblOverallPct" class="prog-pct">0%</div>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button id="tabBtnItems" class="tab-btn active" onclick="switchViewTab(0)">📁 Items / Chapters (0)</button>
+      <button id="tabBtnProg" class="tab-btn" onclick="switchViewTab(1)">📊 Progress Detail</button>
+    </div>
+
+    <div class="panel-container">
+      <div id="panelItems" class="items-panel">
+        <div class="row">
+          <button class="btn-action" onclick="document.getElementById('inputFolder').click()">📁 Add Folder</button>
+          <button class="btn-action" onclick="document.getElementById('inputFiles').click()">📄 Add Files</button>
+          <button id="btnAddDivider" class="btn-action btn-divider" style="display:none" onclick="addBatchDivider()">➕ Divider</button>
+        </div>
+
+        <div id="listboxContainer" class="listbox"></div>
+
+        <div class="bottom-bar">
+          <button class="btn-icon" title="Copy" onclick="copySelected()">📋 Copy</button>
+          <button class="btn-icon" title="Paste" onclick="pasteItems()">📥 Paste</button>
+          <button class="btn-icon" title="Unselect" onclick="clearSelection()">☑️ Unselect</button>
+          <div class="spacer"></div>
+          <button class="btn-danger" onclick="deleteSelected()">❌ Del</button>
+          <button class="btn-danger" onclick="clearAll()">❌ Clear</button>
+        </div>
+      </div>
+
+      <div id="panelProgress" class="progress-panel">
+        <div class="progress-header">📊 Progress Detail Setiap Chapter / Item</div>
+        <div id="progressListContainer" class="progress-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let activeMode = "Single";
+    let singleItemsData = [];
+    let batchItemsData = [];
+    let copiedItems = [];
+    let isProcessing = false;
+
+    const stateConfig = {
+      Single: { mode: "Folders/ZIPs to PDFs", comp: "Recommended", status: "Ready / Idle", pct: 0 },
+      Batch:  { mode: "Folders/ZIPs to PDFs", comp: "Recommended", status: "Ready / Idle", pct: 0 }
+    };
+
+    function naturalCompare(a, b) {
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    }
+
+    function isValidImageName(name) {
+      const lower = name.toLowerCase();
+      const base = name.split('/').pop();
+      if (base.startsWith('._') || name.includes('__MACOSX')) return false;
+      return ['.png', '.jpg', '.jpeg', '.webp', '.bmp'].some(ext => lower.endsWith(ext));
+    }
+
+    function getActiveData() {
+      return activeMode === "Single" ? singleItemsData : batchItemsData;
+    }
+
+    function switchMode(mode) {
+      activeMode = mode;
+      document.getElementById('btnModeSingle').classList.toggle('active', mode === 'Single');
+      document.getElementById('btnModeBatch').classList.toggle('active', mode === 'Batch');
+      document.getElementById('btnAddDivider').style.display = (mode === 'Batch') ? 'flex' : 'none';
+
+      const cfg = stateConfig[mode];
+      document.getElementById('selMode').value = cfg.mode;
+      populateQualityDropdown(cfg.mode, cfg.comp);
+      setStatus(cfg.status, cfg.pct);
+      renderAll();
+    }
+
+    function onOperationModeChange() {
+      const modeVal = document.getElementById('selMode').value;
+      const defaultComp = modeVal === "Folders/ZIPs to PDFs" ? "Recommended" : "JPG";
+      stateConfig[activeMode].mode = modeVal;
+      stateConfig[activeMode].comp = defaultComp;
+      populateQualityDropdown(modeVal, defaultComp);
+    }
+
+    document.getElementById('selQuality').addEventListener('change', (e) => {
+      stateConfig[activeMode].comp = e.target.value;
+    });
+
+    function populateQualityDropdown(modeVal, selectedComp) {
+      const sel = document.getElementById('selQuality');
+      const opts = modeVal === "Folders/ZIPs to PDFs"
+        ? ["Recommended", "Extreme", "Less", "No Compression"]
+        : ["JPG", "PNG", "WebP"];
+      sel.innerHTML = opts.map(o => `<option value="${o}">${o}</option>`).join('');
+      sel.value = selectedComp;
+    }
+
+    function switchViewTab(idx) {
+      document.getElementById('tabBtnItems').classList.toggle('active', idx === 0);
+      document.getElementById('tabBtnProg').classList.toggle('active', idx === 1);
+      document.getElementById('panelItems').style.display = idx === 0 ? 'flex' : 'none';
+      document.getElementById('panelProgress').style.display = idx === 1 ? 'flex' : 'none';
+      renderProgressView();
+    }
+
+    function setStatus(text, pct) {
+      stateConfig[activeMode].status = text;
+      stateConfig[activeMode].pct = pct;
+      document.getElementById('txtStatus').textContent = text;
+      document.getElementById('barOverall').style.width = `${Math.min(100, Math.max(0, pct))}%`;
+      document.getElementById('lblOverallPct').textContent = `${Math.round(pct)}%`;
+    }
+
+    document.getElementById('inputFolder').addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const target = getActiveData();
+
+      if (activeMode === "Single") {
+        const validImgs = files.filter(f => isValidImageName(f.webkitRelativePath || f.name));
+        validImgs.sort((a, b) => naturalCompare(a.webkitRelativePath || a.name, b.webkitRelativePath || b.name));
+        for (const f of validImgs) {
+          target.push({ type: "image", name: f.name, file: f, status: "Pending", progress: 0, selected: false });
+        }
+      } else {
+        const folderMap = new Map();
+        for (const f of files) {
+          const rel = f.webkitRelativePath || f.name;
+          if (!isValidImageName(rel)) continue;
+          const parts = rel.split('/');
+          const folderName = parts.length > 2 ? parts[1] : parts[0];
+          if (!folderMap.has(folderName)) folderMap.set(folderName, []);
+          folderMap.get(folderName).push(f);
+        }
+        const sortedFolders = Array.from(folderMap.keys()).sort(naturalCompare);
+        for (const fName of sortedFolders) {
+          const groupFiles = folderMap.get(fName).sort((a, b) => naturalCompare(a.webkitRelativePath || a.name, b.webkitRelativePath || b.name));
+          target.push({ type: "folder", name: fName, files: groupFiles, status: "Pending", progress: 0, selected: false });
+        }
+      }
+      e.target.value = "";
+      renderAll();
+    });
+
+    document.getElementById('inputFiles').addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const target = getActiveData();
+
+      for (const f of files) {
+        if (f.name.startsWith('._')) continue;
+        const lower = f.name.toLowerCase();
+        if (activeMode === "Single" && lower.endsWith('.zip')) {
+          setStatus(`Membaca ${f.name}...`, 10);
+          const extracted = await extractImagesFromZipFile(f);
+          for (const imgObj of extracted) {
+            target.push({ type: "image", name: imgObj.name, blob: imgObj.blob, status: "Pending", progress: 0, selected: false });
+          }
+          setStatus("Ready / Idle", 0);
+        } else {
+          let type = "pdf";
+          if (lower.endsWith('.zip')) type = "zip";
+          else if (isValidImageName(f.name)) type = "image";
+          target.push({ type, name: f.name, file: f, status: "Pending", progress: 0, selected: false });
+        }
+      }
+      e.target.value = "";
+      renderAll();
+    });
+
+    async function extractImagesFromZipFile(zipFile) {
+      const zip = await JSZip.loadAsync(zipFile);
+      const entries = [];
+      zip.forEach((relPath, zipEntry) => {
+        if (!zipEntry.dir && isValidImageName(relPath)) {
+          entries.push(zipEntry);
+        }
+      });
+      entries.sort((a, b) => naturalCompare(a.name, b.name));
+      const results = [];
+      for (const entry of entries) {
+        const blob = await entry.async("blob");
+        const baseName = entry.name.split('/').pop();
+        results.push({ name: baseName, blob });
+      }
+      return results;
+    }
+
+    function addBatchDivider() {
+      if (activeMode !== "Batch") return;
+      batchItemsData.push({
+        type: "divider",
+        name: "--- [ 🛑 DIVIDER / PEMBATAS ] ---",
+        status: "Ready",
+        progress: 100,
+        selected: false
+      });
+      renderAll();
+    }
+
+    function moveItem(index, dir) {
+      const data = getActiveData();
+      const targetIdx = index + dir;
+      if (targetIdx < 0 || targetIdx >= data.length) return;
+      const [item] = data.splice(index, 1);
+      data.splice(targetIdx, 0, item);
+      renderAll();
+    }
+
+    function copySelected() {
+      const selected = getActiveData().filter(i => i.selected);
+      if (!selected.length) return;
+      copiedItems = selected.map(i => ({ ...i, selected: false }));
+    }
+
+    function pasteItems() {
+      if (!copiedItems.length) return;
+      const target = getActiveData();
+      copiedItems.forEach(i => target.push({ ...i, selected: false }));
+      renderAll();
+    }
+
+    function clearSelection() {
+      getActiveData().forEach(i => i.selected = false);
+      renderAll();
+    }
+
+    function deleteSelected() {
+      if (activeMode === "Single") {
+        singleItemsData = singleItemsData.filter(i => !i.selected);
+      } else {
+        batchItemsData = batchItemsData.filter(i => !i.selected);
+      }
+      renderAll();
+    }
+
+    function clearAll() {
+      const data = getActiveData();
+      if (!data.length) return;
+      if (confirm("Hapus semua daftar item?")) {
+        data.length = 0;
+        setStatus("Ready / Idle", 0);
+        renderAll();
+      }
+    }
+
+    function getProcessingGroups(data) {
+      if (activeMode === "Single") return data.length ? [data] : [];
+      const groups = [];
+      const hasDivider = data.some(i => i.type === "divider");
+      if (!hasDivider) {
+        data.forEach(i => groups.push([i]));
+      } else {
+        let cur = [];
+        for (const item of data) {
+          if (item.type === "divider") {
+            if (cur.length) groups.push(cur);
+            groups.push([item]);
+            cur = [];
+          } else {
+            cur.push(item);
+          }
+        }
+        if (cur.length) groups.push(cur);
+      }
+      return groups;
+    }
+
+    function resolveGroupOutputName(group) {
+      if (activeMode === "Single") return "Merged_Document.pdf";
+      let base = group[0].name;
+      for (const item of group) {
+        if (["folder", "zip", "pdf"].includes(item.type)) {
+          base = item.name;
+          break;
+        }
+      }
+      return base.replace(/\.[^/.]+$/, "") + ".pdf";
+    }
+
+    function renderAll() {
+      const data = getActiveData();
+      document.getElementById('tabBtnItems').textContent = `📁 Items / Chapters (${data.length})`;
+      const box = document.getElementById('listboxContainer');
+
+      if (!data.length) {
+        box.innerHTML = `<div class="empty-msg">Belum ada item dimuat.<br>Tekan 'Add Folder' atau 'Add Files'.</div>`;
+      } else {
+        box.innerHTML = data.map((item, idx) => {
+          const isDiv = item.type === "divider";
+          return `
+            <div class="list-item ${item.selected ? 'selected' : ''} ${isDiv ? 'divider-row' : ''}" onclick="toggleSelect(${idx})">
+              <input type="checkbox" ${item.selected ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelect(${idx})" />
+              <div class="item-name">${item.name}</div>
+              <div class="move-btns" onclick="event.stopPropagation()">
+                <button class="btn-mini" onclick="moveItem(${idx}, -1)">▲</button>
+                <button class="btn-mini" onclick="moveItem(${idx}, 1)">▼</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+      renderProgressView();
+    }
+
+    function toggleSelect(idx) {
+      const data = getActiveData();
+      data[idx].selected = !data[idx].selected;
+      renderAll();
+    }
+
+    function renderProgressView() {
+      const data = getActiveData();
+      const pBox = document.getElementById('progressListContainer');
+      const groups = getProcessingGroups(data);
+
+      if (!groups.length) {
+        pBox.innerHTML = `<div class="empty-msg">Belum ada item dimuat.</div>`;
+        return;
+      }
+
+      pBox.innerHTML = groups.map((group, gIdx) => {
+        const isDiv = group[0].type === "divider";
+        let displayName = group[0].name;
+        let statusText = "READY";
+        let statusClass = "st-done";
+        let avgProg = 100;
+
+        if (!isDiv) {
+          displayName = activeMode === "Single"
+            ? "📄 Merged Output Document.pdf"
+            : `${gIdx + 1}. ${resolveGroupOutputName(group)} (${group.length} item)`;
+          avgProg = group.reduce((s, i) => s + (i.progress || 0), 0) / group.length;
+          const statuses = group.map(i => i.status);
+          if (statuses.every(s => s === "Done")) { statusText = "DONE"; statusClass = "st-done"; }
+          else if (statuses.some(s => s === "Ongoing")) { statusText = "ONGOING"; statusClass = "st-ongoing"; }
+          else { statusText = "PENDING"; statusClass = "st-pending"; }
+        }
+
+        return `
+          <div class="prog-card">
+            <div class="prog-card-top">
+              <div class="prog-card-title">${displayName}</div>
+              <div class="status-badge ${statusClass}">[${statusText}]</div>
+            </div>
+            <div class="prog-track">
+              <div class="prog-fill" style="width:${Math.round(avgProg)}%"></div>
+            </div>
+            <div style="text-align:right; font-size:10px; margin-top:4px">${Math.round(avgProg)}%</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function compressImageBlob(blob, maxWidth, quality) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          let w = img.naturalWidth;
+          let h = img.naturalHeight;
+          if (w > maxWidth) {
+            const scale = maxWidth / w;
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve({ dataUrl, width: w, height: h });
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
+    }
+
+    function triggerDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    async function startProcess() {
+      const data = getActiveData();
+      if (!data.length) return alert("Belum ada item yang dimuat!");
+      if (isProcessing) return;
+
+      isProcessing = true;
+      document.getElementById('btnStart').disabled = true;
+      switchViewTab(1);
+
+      const selected = data.filter(i => i.selected);
+      const itemsToProcess = selected.length ? selected : data;
+      const mode = stateConfig[activeMode].mode;
+      const compOpt = stateConfig[activeMode].comp;
+
+      try {
+        if (mode === "Folders/ZIPs to PDFs") {
+          let quality = 0.45, maxW = 1280;
+          if (compOpt === "Extreme") { quality = 0.25; maxW = 1000; }
+          else if (compOpt === "Less") { quality = 0.75; maxW = 1920; }
+          else if (compOpt === "No Compression") { quality = 0.98; maxW = 99999; }
+
+          const groups = getProcessingGroups(itemsToProcess);
+          const totalPdfs = groups.filter(g => g[0].type !== "divider").length;
+          let curPdfIdx = 0;
+          const usedNames = new Set();
+
+          for (const group of groups) {
+            if (group[0].type === "divider") continue;
+            curPdfIdx++;
+            group.forEach(i => { i.status = "Ongoing"; i.progress = 10; });
+            renderProgressView();
+
+            const orderedBlobs = [];
+            for (const item of group) {
+              if (item.type === "image") {
+                orderedBlobs.push(item.blob || item.file);
+              } else if (item.type === "folder") {
+                item.files.forEach(f => orderedBlobs.push(f));
+              } else if (item.type === "zip") {
+                const extracted = await extractImagesFromZipFile(item.file);
+                extracted.forEach(e => orderedBlobs.push(e.blob));
+              }
+            }
+
+            let outName = resolveGroupOutputName(group);
+            if (usedNames.has(outName.toLowerCase())) {
+              outName = outName.replace(/\.pdf$/i, `_${curPdfIdx}.pdf`);
+            }
+            usedNames.add(outName.toLowerCase());
+
+            const overallPct = (curPdfIdx / totalPdfs) * 100;
+            setStatus(`Memproses ${outName} (${orderedBlobs.length} hal)...`, overallPct);
+
+            if (orderedBlobs.length > 0) {
+              const { jsPDF } = window.jspdf;
+              const pdfW = 595.28;
+              let pdfDoc = null;
+
+              for (let idx = 0; idx < orderedBlobs.length; idx++) {
+                const { dataUrl, width, height } = await compressImageBlob(orderedBlobs[idx], maxW, quality);
+                const pdfH = height * (pdfW / width);
+                const orient = pdfW > pdfH ? 'l' : 'p';
+
+                if (idx === 0) {
+                  pdfDoc = new jsPDF({ orientation: orient, unit: 'pt', format: [pdfW, pdfH] });
+                } else {
+                  pdfDoc.addPage([pdfW, pdfH], orient);
+                }
+                pdfDoc.addImage(dataUrl, 'JPEG', 0, 0, pdfW, pdfH);
+
+                const subProg = 20 + ((idx + 1) / orderedBlobs.length) * 75;
+                group.forEach(i => i.progress = subProg);
+                renderProgressView();
+                await new Promise(r => setTimeout(r, 5));
+              }
+
+              const pdfBlob = pdfDoc.output('blob');
+              triggerDownload(pdfBlob, outName);
+            }
+
+            group.forEach(i => { i.status = "Done"; i.progress = 100; });
+            renderProgressView();
+          }
+
+          setStatus("Selesai Proses Konversi!", 100);
+          alert("Sukses! File PDF berhasil dibuat dan diunduh ke aplikasi Files iPhone Anda.");
+        } else {
+          const pdfItems = itemsToProcess.filter(i => i.type === "pdf");
+          const mime = compOpt === "PNG" ? "image/png" : (compOpt === "WebP" ? "image/webp" : "image/jpeg");
+          const ext = compOpt.toLowerCase();
+
+          for (let idx = 0; idx < pdfItems.length; idx++) {
+            const item = pdfItems[idx];
+            item.status = "Ongoing";
+            renderProgressView();
+
+            const arrayBuf = await item.file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+            const outZip = new JSZip();
+            const baseName = item.name.replace(/\.pdf$/i, "");
+
+            for (let pNum = 1; pNum <= pdf.numPages; pNum++) {
+              const page = await pdf.getPage(pNum);
+              const viewport = page.getViewport({ scale: 2.0 });
+              const canvas = document.createElement('canvas');
+              canvas.width = viewport.width;
+              canvas.height = viewport.height;
+              await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+              const blob = await new Promise(res => canvas.toBlob(res, mime, 0.9));
+              outZip.file(`page_${String(pNum).padStart(3, '0')}.${ext}`, blob);
+
+              item.progress = (pNum / pdf.numPages) * 100;
+              setStatus(`Mengekstrak ${baseName} (${pNum}/${pdf.numPages})...`, ((idx + (pNum / pdf.numPages)) / pdfItems.length) * 100);
+              renderProgressView();
+            }
+
+            const zipBlob = await outZip.generateAsync({ type: "blob" });
+            triggerDownload(zipBlob, `${baseName}_images.zip`);
+            item.status = "Done";
+            item.progress = 100;
+            renderProgressView();
+          }
+          setStatus("Selesai Ekstraksi PDF ke Gambar!", 100);
+          alert("Sukses! Gambar hasil ekstraksi PDF telah diunduh dalam bentuk ZIP.");
+        }
+      } catch (err) {
+        alert("Terjadi kesalahan: " + err.message);
+      } finally {
+        isProcessing = false;
+        document.getElementById('btnStart').disabled = false;
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+    renderAll();
+  </script>
+</body>
+</html>
